@@ -29,6 +29,11 @@ int qmi_apdu_interface_transmit(struct euicc_ctx *ctx, uint8_t **rx, uint32_t *r
 
     qmi_message_uim_send_apdu_input_unref(input);
 
+    if (!output) {
+        fprintf(stderr, "error: send APDU sync returned NULL: %s\n", error ? error->message : "unknown error");
+        return -1;
+    }
+
     if (!qmi_message_uim_send_apdu_output_get_result(output, &error)) {
         fprintf(stderr, "error: send apdu operation failed: %s\n", error->message);
         return -1;
@@ -99,6 +104,9 @@ int qmi_apdu_interface_logic_channel_open(struct euicc_ctx *ctx, const uint8_t *
 void qmi_apdu_interface_logic_channel_close(struct qmi_data *qmi_priv, const uint8_t channel) {
     g_autoptr(GError) error = NULL;
 
+    if (!qmi_priv->uimClient)
+        return;
+
     QmiMessageUimLogicalChannelInput *input;
     input = qmi_message_uim_logical_channel_input_new();
     qmi_message_uim_logical_channel_input_set_slot(input, qmi_priv->uimSlot, NULL);
@@ -131,6 +139,10 @@ void qmi_apdu_interface_logic_channel_close(struct qmi_data *qmi_priv, const uin
 void qmi_apdu_interface_disconnect(struct euicc_ctx *ctx) {
     struct qmi_data *qmi_priv = ctx->apdu.interface->userdata;
     g_autoptr(GError) error = NULL;
+
+    if (!qmi_priv->uimClient)
+        return;
+
     QmiClient *client = QMI_CLIENT(qmi_priv->uimClient);
     QmiDevice *device = QMI_DEVICE(qmi_client_get_device(client));
 
@@ -142,7 +154,7 @@ void qmi_apdu_interface_disconnect(struct euicc_ctx *ctx) {
 }
 
 void qmi_cleanup(struct qmi_data *qmi_priv) {
-    if (qmi_priv->lastChannelId <= 0)
+    if (qmi_priv->lastChannelId <= 0 || !qmi_priv->uimClient)
         return;
     fprintf(stderr, "Cleaning up leaked APDU channel %d\n", qmi_priv->lastChannelId);
     qmi_apdu_interface_logic_channel_close(qmi_priv, qmi_priv->lastChannelId);
