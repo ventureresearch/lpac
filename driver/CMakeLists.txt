@@ -115,7 +115,7 @@ if (LPAC_WITH_APDU_QMI OR LPAC_WITH_APDU_QMI_QRTR)
     add_library(qmi_common OBJECT
             ${CMAKE_CURRENT_SOURCE_DIR}/apdu/qmi_helpers.c
             ${CMAKE_CURRENT_SOURCE_DIR}/apdu/qmi_common.c)
-    target_link_libraries(qmi_common PRIVATE cjson euicc euicc-drivers lpac-utils)
+    target_link_libraries(qmi_common PRIVATE ${CJSON_LIBRARY} euicc euicc-drivers lpac-utils)
 
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(QMI_GLIB REQUIRED IMPORTED_TARGET qmi-glib>=1.36.0)
@@ -124,7 +124,7 @@ endif ()
 
 if (LPAC_WITH_APDU_QMI)
     add_library(driver_apdu_qmi SHARED ${CMAKE_CURRENT_SOURCE_DIR}/apdu/qmi.c)
-    target_link_libraries(driver_apdu_qmi PRIVATE cjson euicc euicc-drivers qmi_common lpac-utils)
+    target_link_libraries(driver_apdu_qmi PRIVATE ${CJSON_LIBRARY} euicc euicc-drivers qmi_common lpac-utils)
     set_target_properties(driver_apdu_qmi PROPERTIES PREFIX "")
     target_compile_definitions(qmi_common PRIVATE LPAC_WITH_DRIVER_APDU_QMI)
     target_compile_definitions(driver_apdu_qmi PRIVATE LPAC_WITH_DRIVER_APDU_QMI)
@@ -133,7 +133,7 @@ endif ()
 
 if (LPAC_WITH_APDU_QMI_QRTR)
     add_library(driver_apdu_qmi_qrtr SHARED ${CMAKE_CURRENT_SOURCE_DIR}/apdu/qmi_qrtr.c)
-    target_link_libraries(driver_apdu_qmi_qrtr PRIVATE cjson euicc euicc-drivers qmi_common lpac-utils)
+    target_link_libraries(driver_apdu_qmi_qrtr PRIVATE ${CJSON_LIBRARY} euicc euicc-drivers qmi_common lpac-utils)
     set_target_properties(driver_apdu_qmi_qrtr PROPERTIES PREFIX "")
     target_compile_definitions(qmi_common PRIVATE LPAC_WITH_DRIVER_APDU_QMI_QRTR)
     target_compile_definitions(driver_apdu_qmi_qrtr PRIVATE LPAC_WITH_DRIVER_APDU_QMI_QRTR)
