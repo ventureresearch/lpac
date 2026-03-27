@@ -40,7 +40,8 @@ static gboolean is_sim_available(struct qmi_data *qmi_priv) {
         return FALSE;
     }
 
-    // Check if any card is present and has a USIM application that is ready
+    // Check if any card is present and has a USIM application that is ready,
+    // or if the card is at least physically present (sufficient for eUICC/LPA operations)
     for (i = 0; i < cards->len; i++) {
         QmiMessageUimGetCardStatusOutputCardStatusCardsElement *card_element;
         card_element = &g_array_index(cards, QmiMessageUimGetCardStatusOutputCardStatusCardsElement, i);
@@ -57,6 +58,12 @@ static gboolean is_sim_available(struct qmi_data *qmi_priv) {
                 && app_element->state == QMI_UIM_CARD_APPLICATION_STATE_READY) {
                 return TRUE;
             }
+        }
+
+        // An eUICC with no active profile may not have a USIM app in READY state,
+        // but the card being present is sufficient for LPA operations
+        if (card_element->card_state == QMI_UIM_CARD_STATE_PRESENT) {
+            return TRUE;
         }
     }
 
@@ -107,10 +114,20 @@ static gboolean select_sim_slot(struct qmi_data *qmi_priv) {
     for (i = 0; i < physical_slot_status->len; i++) {
         QmiPhysicalSlotStatusSlot *element;
         element = &g_array_index(physical_slot_status, QmiPhysicalSlotStatusSlot, i);
+        fprintf(stderr, "slot %u: physical_slot_status=%u\n", i + 1, element->physical_slot_status);
         if (element->physical_slot_status == QMI_UIM_SLOT_STATE_ACTIVE) {
             active_slot = i + 1; // 1-based indexing
             break;
         }
+    }
+
+    fprintf(stderr, "active_slot=%u, target_slot=%u\n", active_slot, target_slot);
+
+    // If no slot reports as ACTIVE, the modem may not support slot status properly.
+    // Skip the switch rather than blindly switching, similar to the NOT_SUPPORTED fallback.
+    if (active_slot == 0) {
+        fprintf(stderr, "warning: no slot reports ACTIVE state, skipping slot switch\n");
+        return TRUE;
     }
 
     // If the active slot is not the target slot, switch to the target slot
@@ -143,8 +160,8 @@ static gboolean select_sim_slot(struct qmi_data *qmi_priv) {
             return FALSE;
         }
 
-        // Wait for SIM to be available
-        for (retries = 0; retries < 20; retries++) {
+        // Wait for SIM to be available (up to 20 seconds for slow modems)
+        for (retries = 0; retries < 40; retries++) {
             if (is_sim_available(qmi_priv)) {
                 return TRUE;
             }
