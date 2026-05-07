@@ -60,8 +60,40 @@ static int apdu_interface_transmit(struct euicc_ctx *ctx, uint8_t **rx, uint32_t
     *rx = NULL;
     *rx_len = 0;
 
+    // Two Sierra Wireless MDM9x50 family quirks (MC74xx) interact here:
+    //
+    // 1) libeuicc OR's ctx->apdu._internal.logic_channel into the bottom 4 bits
+    //    of CLA (see euicc/euicc.c "req->cla = (req->cla & 0xF0) | logic_channel"),
+    //    expecting that index to match the ISO 7816 logical channel the eUICC
+    //    opened. That assumption holds when +CCHO returns a small channel index,
+    //    but Sierra returns an opaque <sessionid> (e.g. "000000000000006f").
+    //    AT+CGLA's <sessionid> argument routes the APDU to the right channel
+    //    inside the modem; without clearing the CLA channel bits, the eUICC sees
+    //    a channel it never opened and rejects every APDU.
+    //
+    // 2) Sierra's AT+CGLA APDU-hex parser is case-sensitive: lowercase hex
+    //    triggers "+CME ERROR: 323" before the APDU is delivered to the eUICC,
+    //    even though +CCHO accepts AID hex in either case. euicc_hexutil_bin2hex
+    //    emits lowercase, so we uppercase the encoded buffer here.
+    //
+    // Both quirks were isolated by capturing the lpac<->modem AT traffic with a
+    // pty bridge against an MC7411 (firmware SWI9X50C_01.13.02.00) in 2026-05.
+
+    uint8_t *tx_fixed = malloc(tx_len);
+    if (tx_fixed == NULL)
+        goto err;
+    memcpy(tx_fixed, tx, tx_len);
+    if (tx_len > 0)
+        tx_fixed[0] &= 0xFC;
+
     encoded = malloc(tx_len * 2 + 1);
-    euicc_hexutil_bin2hex(encoded, tx_len * 2 + 1, tx, tx_len);
+    euicc_hexutil_bin2hex(encoded, tx_len * 2 + 1, tx_fixed, tx_len);
+    free(tx_fixed);
+
+    for (char *p = encoded; *p; p++) {
+        if (*p >= 'a' && *p <= 'f')
+            *p = (char)(*p - 'a' + 'A');
+    }
 
     at_emit_command(userdata, "AT+CGLA=%s,%u,\"%s\"", logic_channel, tx_len * 2, encoded);
     if (at_expect(userdata, &response, "+CGLA: ") != 0 || response == NULL)
